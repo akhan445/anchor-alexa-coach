@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anchor on Alexa+ (simulated)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚓</text></svg>">
+<style>
+  /* Default palette: "Alexa" (squid-ink navy, cyan accent, Amazon-orange skip) */
+  :root {
+    --bg: #1a2433; --panel: #232f3e; --panel2: #2c3a4d; --line: #37475d; --text: #eef2fb; --muted: #9aa6c2;
+    --accent: #00caff; --accent-soft: #123a4f; --accent-line: #1b6a8a; --on-accent: #06131e;
+    --ok: #3ccf91; --ok-soft: #1d3a33; --warn: #ffb020; --warn-soft: #3d3220;
+    --skip: #ff9900; --on-skip: #1b1406; --skip-glow: rgba(255, 153, 0, .35); --ff: #ffc266;
+  }
+  /* Other colour themes: try them with ?theme=midnight (or harbor, dusk, slate) */
+  [data-theme=midnight] { --bg: #1b2232; --panel: #252e43; --panel2: #2c3650; --line: #36415e; --accent: #3fb6f5; --accent-soft: #1f3a55; --accent-line: #2b5b84;
+    --skip: #ff7a45; --skip-glow: rgba(255, 110, 80, .35); --ff: #ffb38a; }
+  [data-theme=harbor] { --bg: #142428; --panel: #1c3237; --panel2: #244046; --line: #2f4f55; --muted: #93b3b5; --accent: #2dd4bf; --accent-soft: #15403c; --accent-line: #1f7a6e;
+    --skip: #fbbf24; --skip-glow: rgba(251, 160, 36, .35); --ff: #fcd34d; }
+  [data-theme=dusk] { --bg: #1d1a2c; --panel: #28233d; --panel2: #322c4b; --line: #403859; --muted: #a9a0c8; --accent: #a78bfa; --accent-soft: #352c5c; --accent-line: #5b4a9a;
+    --skip: #fb7185; --skip-glow: rgba(244, 114, 182, .35); --ff: #fda4af; }
+  [data-theme=slate] { --bg: #1b1e23; --panel: #252a31; --panel2: #2e343d; --line: #3a414c; --muted: #a0a8b4; --accent: #a3e635; --accent-soft: #2d3b1c; --accent-line: #4d6b22;
+    --skip: #f97316; --skip-glow: rgba(249, 115, 22, .35); --ff: #fdba74; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; max-width: 1500px; margin: 0 auto; padding: 18px 16px 6px; }
+  header .logo { font-size: 28px; }
+  h1 { font-size: 22px; margin: 0; } .tagline { color: var(--muted); font-size: 13px; margin: 0; }
+  main { display: grid; grid-template-columns: 76px 300px 1.5fr 1fr; gap: 16px; max-width: 1500px; margin: 0 auto; padding: 10px 16px 20px; }
+  @media (max-width: 1250px) { main { grid-template-columns: 76px 300px 1fr; } .col-log { grid-column: 1 / -1; } }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } .rail { flex-direction: row; height: auto; } .rail .railbtn.push { margin: 0 0 0 auto; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; min-height: 0; }
+  .chathead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .chathead h2 { margin: 0; }
+  .voicectl { display: flex; gap: 6px; }
+  .chip { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font: 600 12px system-ui, sans-serif; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); } .chip.off { color: var(--muted); }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .col-chat .panel, .col-log .panel { height: calc(100vh - 100px); min-height: 520px; }
+  #chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; }
+  .you { align-self: flex-end; background: var(--panel2); border-bottom-right-radius: 4px; }
+  .alexa { align-self: flex-start; background: var(--accent-soft); border: 1px solid var(--accent-line); border-bottom-left-radius: 4px; }
+  .system { align-self: center; color: var(--muted); font-size: 13px; text-align: center; max-width: 95%; }
+  .system.alarm { color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 3px 12px; font-weight: 600; }
+  .controls { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  /* An Echo-style light ring instead of a mic icon (Amazon's actual logo is a trademark, so we don't copy it). */
+  #mic { width: 60px; height: 60px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; flex: none; position: relative;
+         background: conic-gradient(from 0deg, var(--accent), #2f6bff, var(--accent), #7fe3ff, var(--accent)); transition: box-shadow .2s; }
+  #mic::after { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: var(--panel); box-shadow: inset 0 0 10px rgba(0, 0, 0, .5); }
+  #mic:hover { box-shadow: 0 0 14px var(--accent); }
+  #mic.listening { animation: spin 1.2s linear infinite; box-shadow: 0 0 0 6px var(--accent-soft), 0 0 28px var(--accent); }
+  #mic.thinking { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 8px var(--accent-soft), 0 0 30px var(--accent); filter: brightness(1.3); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  form { flex: 1; display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: inherit; }
+  button.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; font: inherit; cursor: pointer; }
+  button.btn:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  #trace { flex: 1; overflow-y: auto; font: 12.5px/1.45 ui-monospace, Menlo, monospace; }
+  .call { border-left: 3px solid var(--ok); background: var(--ok-soft); padding: 8px 10px; margin-bottom: 10px; border-radius: 0 10px 10px 0; }
+  .call.local { border-color: var(--warn); background: var(--warn-soft); }
+  .call b { color: var(--ok); } .call.local b { color: var(--warn); }
+  .call .out { color: #c3cbe0; white-space: pre-wrap; margin-top: 2px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .legend { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .col-side { display: flex; flex-direction: column; gap: 16px; }
+  .rail { align-items: center; gap: 10px; padding: 12px 8px; height: calc(100vh - 100px); min-height: 520px; }
+  .railbtn { width: 58px; padding: 8px 0; border-radius: 14px; border: 1px solid transparent; background: transparent; color: var(--muted); font: 600 11px system-ui, sans-serif; cursor: pointer; }
+  .railbtn span { display: block; font-size: 26px; line-height: 1.2; }
+  .railbtn .sil { width: 34px; height: 34px; margin: 0 auto 3px; border-radius: 50%; background: var(--panel2); color: var(--muted); display: grid; place-items: end center; overflow: hidden; }
+  .railbtn .sil svg { width: 30px; height: 30px; }
+  .railbtn.active .sil { background: var(--accent); color: var(--panel); }
+  .railbtn:hover { background: var(--panel2); }
+  .railbtn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+  .railbtn.push { margin-top: auto; }
+  .who { text-align: center; font-weight: 700; } .who .muted { font-weight: 400; }
+  .ring { width: 210px; height: 210px; border-radius: 50%; margin: 16px auto 8px; display: grid; place-items: center; background: conic-gradient(var(--accent) calc(var(--p, 0) * 1%), var(--panel2) 0); }
+  .ring > div { width: 186px; height: 186px; border-radius: 50%; background: var(--panel); display: grid; place-items: center; text-align: center; }
+  .clock { font-size: 32px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .ring.ff .clock { color: var(--ff); }
+  #nextText { font-size: 13px; margin-top: 6px; padding: 0 12px; }
+  .skip { margin-top: 8px; width: 100%; border: 0; border-radius: 12px; padding: 12px 14px; font: 700 15px system-ui, sans-serif; cursor: pointer;
+          display: flex; justify-content: space-between; align-items: center; gap: 8px;
+          background: var(--skip); color: var(--on-skip); box-shadow: 0 6px 18px var(--skip-glow); transition: transform .1s; }
+  .skip small { font-weight: 600; opacity: .75; font-variant-numeric: tabular-nums; }
+  .skip:hover { transform: translateY(-1px); } .skip:disabled { opacity: .6; cursor: default; transform: none; }
+  .rem { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .rem:last-child { border-bottom: 0; }
+  .rem .t { font-weight: 700; width: 78px; flex: none; font-variant-numeric: tabular-nums; }
+  .rem .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--panel2); flex: none; }
+  .rem.fired { opacity: .5; }
+  .rem.next { background: var(--accent-soft); margin: 0 -8px; padding: 9px 8px; border-radius: 10px; border-bottom-color: transparent; }
+  .badge { background: var(--warn-soft); color: var(--warn); font-size: 11px; padding: 1px 7px; border-radius: 999px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⚓</div>
+  <div>
+    <h1>Anchor</h1>
+    <p class="tagline">Adaptive routine coach · simulated Alexa+ · tap the light ring to talk, or type</p>
+  </div>
+</header>
+
+<main>
+  <nav class="panel rail">
+    <button data-user="bob" class="railbtn active" title="Bob: custom anchors"><span class="sil"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.6-4.6 4.1-7.4 8.5-7.4s7.9 2.8 8.5 7.4z"/></svg></span>Bob</button>
+    <button data-user="ahmed" class="railbtn" title="Ahmed: prayer-time anchors"><span class="sil"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.6-4.6 4.1-7.4 8.5-7.4s7.9 2.8 8.5 7.4z"/></svg></span>Ahmed</button>
+    <button class="railbtn push" id="newDay" title="Keep this user's setup and start a fresh day at midnight"><span>🌅</span>New day</button>
+    <button class="railbtn" id="reset" title="Erase this user and set up from scratch"><span>↺</span>Start over</button>
+  </nav>
+  <section class="col-side">
+    <div class="panel">
+      <div class="who" id="who"></div>
+      <div class="ring" id="ring"><div><div>
+        <div class="clock" id="clockText">7:00</div>
+        <div class="muted" id="dayText"></div>
+        <div id="nextText" class="muted"></div>
+      </div></div></div>
+      <button class="skip" id="skip"><span>⏩ Skip to next anchor</span><small></small></button>
+    </div>
+    <div class="panel">
+      <h2>⏰ Today's anchors</h2>
+      <div id="reminders"></div>
+    </div>
+  </section>
+
+  <section class="col-chat">
+    <div class="panel">
+      <div class="chathead">
+        <h2>💬 Alexa</h2>
+        <div class="voicectl">
+          <button class="chip" id="voiceBtn" title="Turn Alexa's voice on or off">🔊 Voice on</button>
+          <button class="chip" id="speedBtn" title="How fast Alexa talks">1.2×</button>
+        </div>
+      </div>
+      <div id="chat"></div>
+      <div class="controls">
+        <button id="mic" title="Talk to Alexa" aria-label="Talk to Alexa"></button>
+        <form id="form"><input id="text" type="text" placeholder="Or type to Alexa…" autocomplete="off"><button class="btn primary">Send</button></form>
+      </div>
+    </div>
+  </section>
+
+  <section class="col-log">
+    <div class="panel">
+      <h2>🔧 Under the hood · MCP</h2>
+      <div id="trace"></div>
+      <div class="legend">🟢 MCP call to Anchor &nbsp; 🟠 Alexa built-in</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const theme = new URLSearchParams(location.search).get('theme');
+if (theme) document.documentElement.dataset.theme = theme;
+const $ = id => document.getElementById(id);
+const chatEl = $('chat'), traceEl = $('trace'), mic = $('mic');
+const HINTS = {
+  bob: 'Say "Hi Alexa" to begin. When Alexa asks for anchors, try: "Lunch at 12 on weekdays, work ends at 5, gym Tuesday and Thursday at 7 PM and Saturday at 8 AM, and wind down at 10."',
+  ahmed: 'Say "Hi Alexa" to begin. When Alexa asks for anchors, try: "Use my prayer times as my anchors."',
+};
+const NAME = { bob: 'Bob', ahmed: 'Ahmed' };
+const WHO = { bob: 'Bob <span class="muted">· custom anchors</span>', ahmed: 'Ahmed <span class="muted">· prayer times</span>' };
+const EMPTY_TRACE = '<p class="muted">Every time Alexa calls one of Anchor\'s tools over MCP, it shows up here with the input, the answer and how long it took.</p>';
+const EMPTY_REM = '<p class="muted">None yet. Tell Alexa your anchors and a reminder is set for each one.</p>';
+
+// ---------- Users: each tab keeps its own chat, log and reminders ----------
+let user = 'bob';
+const users = { bob: { reminders: [] }, ahmed: { reminders: [] } };
+const me = () => users[user];
+
+// ---------- The simulated clock ----------
+// It runs in real time from whatever you set, so reminders fire on their own when it reaches them.
+let clockMs, lastReal = Date.now();
+function setClock(date) { clockMs = date.getTime(); renderClock(); }
+let baseDate = new Date(); // the simulated day (demo scene 3 moves it to next Monday)
+function at(h, m) { const d = new Date(baseDate); d.setHours(h, m, 0, 0); return d; }
+const nextReminder = () => me().reminders.find(r => !r.fired && r.at > clockMs);
+
+function shortDuration(ms) {
+  const mins = Math.max(1, Math.round(ms / 60000));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function renderClock() {
+  const d = new Date(clockMs);
+  $('clockText').textContent = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  $('dayText').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  // The ring fills up as the clock moves from the last anchor (or midnight) to the next one.
+  const next = nextReminder();
+  const prev = me().reminders.filter(r => r.at <= clockMs).pop();
+  const start = prev ? prev.at : at(0, 0).getTime();
+  const p = next ? Math.min(100, Math.max(0, ((clockMs - start) / (next.at - start)) * 100)) : 100;
+  $('ring').style.setProperty('--p', p.toFixed(1));
+  $('skip').firstChild.textContent = next ? `⏩ Skip to ${next.label}` : '⏩ Skip to next anchor';
+  $('skip').lastChild.textContent = next ? next.time : '';
+  $('nextText').textContent = next ? `${icon(next.label)} ${next.label} in ${shortDuration(next.at - clockMs)}`
+    : me().reminders.length ? '✅ No more anchors today' : 'No anchors yet';
+}
+
+function resetClock() { setClock(at(0, 0)); } // each day starts at midnight
+resetClock();
+
+setInterval(() => {
+  const now = Date.now();
+  if (fastForwarding || demoPaused) { lastReal = now; return; }
+  const before = clockMs;
+  clockMs += now - lastReal;
+  lastReal = now;
+  renderClock();
+  checkReminders(before, clockMs);
+}, 1000);
+
+// Skip: fast-forward the clock to the next anchor over about a second, then let the reminder fire.
+let fastForwarding = false, demoPaused = false;
+$('skip').onclick = () => {
+  const next = nextReminder();
+  if (!next) return add('system', 'No more reminders today.');
+  const from = clockMs, to = next.at, t0 = performance.now(), duration = 1200;
+  fastForwarding = true;
+  $('skip').disabled = true;
+  $('ring').classList.add('ff');
+  function frame(t) {
+    const k = Math.min(1, (t - t0) / duration);
+    const eased = 1 - Math.pow(1 - k, 3);
+    clockMs = from + (to - from) * eased;
+    renderClock();
+    if (k < 1) return requestAnimationFrame(frame);
+    clockMs = to;
+    fastForwarding = false;
+    lastReal = Date.now();
+    $('skip').disabled = false;
+    $('ring').classList.remove('ff');
+    checkReminders(from, to);
+    renderClock();
+  }
+  requestAnimationFrame(frame);
+};
+
+// ---------- Icons for anchors ----------
+// First match wins, so specific words come before general ones. Anything unmatched gets a pin.
+const ICONS = [
+  [/fajr/i, '🌄'], [/dhuhr|zuhr|asr|jumu|salah|prayer/i, '🕌'], [/maghrib/i, '🌇'], [/isha/i, '🌙'], [/quran|memori[sz]/i, '📖'],
+  [/morning/i, '☀️'], [/evening|wind|sleep|bed|night/i, '😴'],
+  [/breakfast/i, '🍳'], [/lunch/i, '🥗'], [/dinner|supper/i, '🍽️'], [/coffee|tea\b/i, '☕'], [/snack|meal|eat/i, '🍎'], [/water|hydrat/i, '💧'],
+  [/gym|workout|lift|weights|exercise|train/i, '🏋️'], [/run|jog/i, '🏃'], [/walk|stroll/i, '🚶'], [/yoga|stretch/i, '🧘'], [/swim/i, '🏊'], [/bike|cycl/i, '🚴'],
+  [/meditat|breath|mindful/i, '🧘'], [/nap|rest/i, '💤'],
+  [/standup|meeting|call/i, '📞'], [/work|office|deep focus|focus/i, '💼'], [/study|class|school|homework|lecture|exam/i, '📚'], [/read|book/i, '📚'],
+  [/email|inbox/i, '📧'], [/commute|drive|bus|train ride/i, '🚗'], [/kids|pick ?up|drop ?off|family/i, '👨‍👩‍👧'],
+  [/clean|tidy|chores|laundry/i, '🧹'], [/cook|meal prep/i, '🍳'], [/groceri|shop/i, '🛒'], [/journal|reflect|plan/i, '📝'],
+  [/code|build|ship/i, '💻'], [/break/i, '⏸️'],
+];
+function icon(label) { return (ICONS.find(([re]) => re.test(label)) || [, '📍'])[1]; }
+
+// ---------- Reminders ----------
+// "1:03 PM" or "13:03" -> time today in ms
+function parseTime(text) {
+  const m = text.match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);
+  if (!m) return null;
+  let h = Number(m[1]);
+  if (m[3]) h = (h % 12) + (m[3].toUpperCase() === 'PM' ? 12 : 0);
+  return at(h, Number(m[2])).getTime();
+}
+
+function updateReminders(list = []) {
+  const old = me().reminders;
+  me().reminders = list.map(r => {
+    const t = parseTime(r.time);
+    const prev = old.find(o => o.label === r.label && o.at === t);
+    // Anchors already behind the clock count as done, so they don't fire late.
+    return { ...r, at: t, fired: prev?.fired || t <= clockMs };
+  }).filter((r, i, all) => r.at && all.findIndex(o => o.label === r.label && o.at === r.at) === i)
+    .sort((a, b) => a.at - b.at);
+  renderReminders();
+}
+
+function renderReminders() {
+  const el = $('reminders');
+  const list = me().reminders;
+  if (!list.length) { el.innerHTML = EMPTY_REM; return; }
+  const next = nextReminder();
+  el.innerHTML = '';
+  for (const r of list) {
+    const row = document.createElement('div');
+    row.className = 'rem' + (r.fired ? ' fired' : '') + (r === next ? ' next' : '');
+    row.innerHTML = '<span class="ico"></span><span class="t"></span><span class="l"></span>';
+    row.querySelector('.ico').textContent = icon(r.label);
+    row.querySelector('.t').textContent = r.time;
+    row.querySelector('.l').textContent = r.label;
+    if (r === next) row.querySelector('.l').insertAdjacentHTML('beforeend', '<span class="badge">next</span>');
+    if (r.fired) row.querySelector('.l').append(' ✓');
+    el.append(row);
+  }
+  renderClock();
+}
+
+let busy = false;
+const queue = [];
+function checkReminders(from, to) {
+  for (const r of me().reminders) {
+    if (!r.fired && r.at > from && r.at <= to) {
+      r.fired = true;
+      chime();
+      queue.push(r);
+    }
+  }
+  renderReminders();
+  drain();
+}
+async function drain() {
+  if (busy || !queue.length) return;
+  const r = queue.shift();
+  add('system alarm', `⏰ ${r.time} · ${r.label}`);
+  await send(`(Reminder fired: ${r.label} at ${r.time})`, { silentUser: true });
+  drain();
+}
+
+function chime() {
+  try {
+    const ctx = new AudioContext();
+    [880, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.25);
+      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + i * 0.25 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.25 + 0.5);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + i * 0.25);
+      o.stop(ctx.currentTime + i * 0.25 + 0.5);
+    });
+  } catch {}
+}
+
+// ---------- Chat ----------
+function add(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  chatEl.append(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+// Alexa's voice: Amazon Polly on the server (/api/speak). If Polly isn't available, fall back to the browser's voice.
+let audio = null, speechId = 0;
+// Voice on/off and speed, remembered in this browser.
+const SPEEDS = [1, 1.2, 1.4, 1.6];
+const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+const savePref = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+let voiceOn = pref('anchor.voiceOn', true), speed = pref('anchor.speed', 1.2);
+function renderVoice() {
+  $('voiceBtn').textContent = voiceOn ? '🔊 Voice on' : '🔇 Voice off';
+  $('voiceBtn').classList.toggle('off', !voiceOn);
+  $('speedBtn').textContent = `${speed}×`;
+}
+renderVoice();
+$('voiceBtn').onclick = () => { voiceOn = !voiceOn; savePref('anchor.voiceOn', voiceOn); if (!voiceOn) stopSpeaking(); renderVoice(); };
+$('speedBtn').onclick = () => {
+  speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+  savePref('anchor.speed', speed);
+  if (audio) audio.playbackRate = speed; // applies to what's playing right now too
+  renderVoice();
+};
+
+function stopSpeaking() {
+  speechId++; // cancels any clip still waiting to play
+  if (audio) { audio.pause(); audio.dispatchEvent(new Event('ended')); }
+  speechSynthesis.cancel();
+}
+// To start talking sooner, the first sentence is synthesized on its own and plays while the rest is still being made.
+async function speak(text) {
+  stopSpeaking();
+  if (!voiceOn) return;
+  const id = ++speechId;
+  const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+  const parts = [sentences[0], sentences.slice(1).join(' ')].map(t => t.trim()).filter(Boolean);
+  const fetchAudio = part =>
+    fetch('/api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: part }) })
+      .then(async res => { if (!res.ok) throw new Error(await res.text()); return URL.createObjectURL(await res.blob()); });
+  const pending = parts.map(fetchAudio); // both requests start now
+  pending.forEach(clip => clip.catch(() => {})); // a failure is handled below; don't report it twice
+  try {
+    for (const clip of pending) {
+      const url = await clip;
+      if (id !== speechId) return; // something newer started speaking
+      audio = new Audio(url);
+      audio.playbackRate = speed; // the browser speeds it up without making it sound chipmunky
+      await audio.play();
+      await new Promise(resolve => { audio.onended = resolve; });
+    }
+  } catch (e) {
+    if (id !== speechId) return;
+    console.warn('Polly unavailable, using the browser voice:', e.message);
+    browserSpeak(text);
+  }
+}
+
+// Chrome stops speaking long utterances partway through, so speak one sentence at a time.
+const speaking = []; // keep references so Chrome doesn't garbage-collect queued utterances
+function browserSpeak(text) {
+  speechSynthesis.cancel();
+  speaking.length = 0;
+  const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+  for (const sentence of sentences) {
+    const u = new SpeechSynthesisUtterance(sentence.trim());
+    u.rate = speed;
+    speaking.push(u);
+    speechSynthesis.speak(u);
+  }
+}
+
+function showTrace(trace) {
+  if (!trace.length) return;
+  if (traceEl.querySelector('p.muted')) traceEl.innerHTML = '';
+  for (const c of trace) {
+    const div = document.createElement('div');
+    div.className = 'call' + (c.mcp ? '' : ' local');
+    div.innerHTML = '<b></b> <span class="muted"></span><div class="in"></div><div class="out"></div>';
+    div.querySelector('b').textContent = c.tool;
+    div.querySelector('.muted').textContent = c.mcp ? `MCP → Anchor · ${c.ms} ms` : 'Alexa built-in';
+    div.querySelector('.in').textContent = JSON.stringify(c.input);
+    div.querySelector('.out').textContent = '→ ' + c.output;
+    traceEl.prepend(div);
+  }
+}
+
+let lastSpeech = Promise.resolve();
+async function send(text, { silentUser = false } = {}) {
+  if (!text.trim()) return;
+  if (!silentUser) add('you', text);
+  busy = true;
+  mic.classList.add('thinking');
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, user, now: new Date(clockMs).toISOString() }),
+    });
+    const data = await res.json();
+    showTrace(data.trace || []);
+    updateReminders(data.reminders);
+    add('alexa', data.reply);
+    lastSpeech = speak(data.reply);
+  } catch (e) {
+    add('system', 'Could not reach the server. Is it running?');
+  } finally {
+    busy = false;
+    mic.classList.remove('thinking');
+  }
+}
+
+$('form').onsubmit = e => { e.preventDefault(); send($('text').value); $('text').value = ''; };
+
+// ---------- Switching users and resetting ----------
+function switchUser(next) {
+  me().chat = chatEl.innerHTML;
+  me().trace = traceEl.innerHTML;
+  me().clockMs = clockMs; // each user lives on their own clock
+  user = next;
+  if (me().clockMs) setClock(new Date(me().clockMs)); else resetClock();
+  document.querySelectorAll('.railbtn[data-user]').forEach(t => t.classList.toggle('active', t.dataset.user === user));
+  chatEl.innerHTML = me().chat || '';
+  traceEl.innerHTML = me().trace || EMPTY_TRACE;
+  if (!me().chat) add('system', HINTS[user]);
+  $('who').innerHTML = WHO[user];
+  renderReminders();
+  if (!me().reminders.length) loadToday();
+}
+// A user set up earlier still has anchors saved on the server: show their reminders straight away.
+async function loadToday() {
+  const forUser = user;
+  try {
+    const res = await fetch('/api/today', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, now: new Date(clockMs).toISOString() }) });
+    const data = await res.json();
+    if (forUser !== user || me().reminders.length || !data.reminders.length) return;
+    updateReminders(data.reminders);
+    if (new URLSearchParams(location.search).has('demo')) return; // demo scenes decide when the day starts
+    startDay(`🌅 Welcome back, ${NAME[user]}. Your anchors are set, so here's a new day: skipping to your first anchor.`);
+  } catch {}
+}
+
+// A user who's already set up starts each day at their first anchor (usually the morning routine), not at setup.
+function startDay(message) {
+  chatEl.innerHTML = '';
+  add('system', message);
+  setTimeout(() => nextReminder() && $('skip').click(), 900);
+}
+document.querySelectorAll('.railbtn[data-user]').forEach(t => (t.onclick = () => t.dataset.user !== user && switchUser(t.dataset.user)));
+
+$('newDay').onclick = async () => {
+  resetClock();
+  const res = await fetch('/api/new-day', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user, now: new Date(clockMs).toISOString() }),
+  });
+  const data = await res.json();
+  me().reminders = [];
+  updateReminders(data.reminders);
+  chatEl.innerHTML = '';
+  traceEl.innerHTML = EMPTY_TRACE;
+  startDay(`🌅 A new day for ${NAME[user]}. Setup is kept: skipping to your first anchor.`);
+};
+
+$('reset').onclick = async (e, ask = true) => {
+  if (ask && !confirm('Erase this user and start setup from scratch?')) return;
+  await fetch('/api/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user }) });
+  users[user] = { reminders: [] };
+  resetClock();
+  chatEl.innerHTML = '';
+  traceEl.innerHTML = EMPTY_TRACE;
+  add('system', HINTS[user]);
+  renderReminders();
+};
+
+traceEl.innerHTML = EMPTY_TRACE;
+$('who').innerHTML = WHO[user];
+add('system', HINTS[user]);
+renderReminders();
+loadToday();
+
+// ---------- Voice: Chrome's built-in speech recognition ----------
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!Recognition) {
+  mic.title = 'Voice needs Chrome. You can still type.';
+  mic.onclick = () => add('system', 'Voice input needs Google Chrome. Typing works everywhere.');
+} else {
+  const rec = new Recognition();
+  rec.lang = 'en-US';
+  // Keep listening through short pauses: send once you've been quiet for a few seconds, or tap the ring again.
+  rec.continuous = true;
+  rec.interimResults = true;
+  const PAUSE_MS = 3000;
+  let listening = false, heard = '', silence;
+  const finish = () => {
+    if (!listening) return;
+    listening = false;
+    clearTimeout(silence);
+    mic.classList.remove('listening');
+    rec.stop();
+    $('text').value = '';
+    if (heard.trim()) send(heard.trim());
+  };
+  rec.onresult = e => {
+    heard = [...e.results].map(r => r[0].transcript).join(' ');
+    $('text').value = heard; // show the words as they come in
+    clearTimeout(silence);
+    silence = setTimeout(finish, PAUSE_MS);
+  };
+  rec.onend = finish; // Chrome gave up (long silence or an error)
+  mic.onclick = () => {
+    if (listening) return finish();
+    stopSpeaking();
+    listening = true;
+    heard = '';
+    mic.classList.add('listening');
+    rec.start();
+  };
+}
+
+// ---------- Demo mode: open /?demo=1 (or 2, 3) and press D to play a scripted scene for the video ----------
+// Everything is real (Bedrock, MCP, Polly); only the user's lines are typed in for you.
+const DEMOS = {
+  // 1. Bob sets up Anchor for the first time.
+  1: { user: 'bob', fresh: true, steps: [
+    { say: 'Hi Alexa' },
+    { say: 'Work starts at 9, lunch is at 12, and my day ends at 5 on weekdays. Gym is Monday, Wednesday and Thursday at 7 PM.' },
+    { say: 'My morning routine starts at 7. Drink water for 2 minutes, shower for 10 minutes, and a 15 minute walk.' },
+    { say: 'My evening routine starts at 10 PM. Tidy up for 10 minutes, then read for 20 minutes.' },
+  ] },
+  // 2. Ahmed uses prayer times, and his morning routine is paired with Fajr.
+  2: { user: 'ahmed', fresh: true, steps: [
+    { say: 'Hey Alexa' },
+    { say: 'Use my prayer times as my anchors.' },
+    { say: 'Pair it with Fajr. Make wudu for 5 minutes, read Quran for 15 minutes, then breakfast for 15 minutes.' },
+  ] },
+  // 3. Bob's next day, a Monday (so the gym shows up): morning routine, planning, a check-in.
+  3: { user: 'bob', monday: true, steps: [
+    { newDay: true },
+    { say: "Yes, let's start" },
+    { say: 'Done' },
+    { say: 'Done. That felt a little rushed, make it 20 minutes from now on.' },
+    { say: 'Done' },
+    { say: "Before lunch I'll finish the client report. After work I'm hitting the gym." },
+    { skip: true }, // Work start
+    { say: 'Morning went well. Starting on the report now.' },
+    { skip: true }, // Lunch: Alexa asks about the report
+    { say: 'I finished the report and feel good about it.' },
+  ] },
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Wait until Alexa has finished thinking and speaking, and nothing else (a skip, a reminder) is about to start.
+async function idle() {
+  for (let calm = 0; calm < 2; ) {
+    await sleep(500);
+    if (busy || queue.length || fastForwarding) { calm = 0; continue; }
+    await lastSpeech;
+    calm++;
+  }
+  await sleep(500);
+}
+async function typeAndSend(text) {
+  for (let i = 1; i <= text.length; i++) { $('text').value = text.slice(0, i); await sleep(22); }
+  await sleep(300);
+  $('text').value = '';
+  await send(text);
+}
+function nextMonday() {
+  const d = new Date();
+  d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
+  return d;
+}
+let demoRunning = false;
+async function runDemo(scene) {
+  if (demoRunning || !scene) return;
+  demoRunning = true;
+  if (user !== scene.user) switchUser(scene.user);
+  if (scene.fresh) { await $('reset').onclick(null, false); chatEl.innerHTML = ''; }
+  if (scene.monday) baseDate = nextMonday();
+  await sleep(1200);
+  for (const step of scene.steps) {
+    while (demoPaused) await sleep(200);
+    if (step.newDay) { $('newDay').click(); await sleep(1500); } // new day -> skips to the first anchor, the morning routine
+    else if (step.skip) { if (nextReminder()) $('skip').click(); }
+    else await typeAndSend(step.say);
+    await idle();
+  }
+  demoRunning = false;
+}
+const demoParam = new URLSearchParams(location.search).get('demo');
+if (demoParam !== null) {
+  const scene = DEMOS[demoParam || 1];
+  if (scene && scene.user !== user) switchUser(scene.user);
+  add('system', scene ? `🎬 Demo scene ${demoParam || 1}: D to start, P to pause or resume, R to restart.` : 'Unknown demo scene. Use ?demo=1, 2 or 3.');
+  addEventListener('keydown', e => {
+    if (document.activeElement === $('text')) return;
+    const key = e.key.toLowerCase();
+    if (key === 'd') runDemo(scene);
+    if (key === 'r') location.reload(); // then press D again
+    if (key === 'p' && demoRunning) {
+      demoPaused = !demoPaused;
+      // Pause or resume Alexa's voice too. The clock stops while paused.
+      if (audio) demoPaused ? audio.pause() : audio.play();
+      document.title = demoPaused ? '⏸ Paused · Anchor' : 'Anchor on Alexa+ (simulated)'; // shown in the tab, not in the recording area
+    }
+  });
+}
+</script>
+</body>
+</html>

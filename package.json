@@ -1,0 +1,26 @@
+{
+  "name": "alexa-routine-coach",
+  "version": "1.0.0",
+  "description": "Adaptive routine coach: an MCP server for Alexa+ with Amazon Bedrock",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/server.js",
+    "smoke": "node scripts/smoke-test.js",
+    "check-bedrock": "node scripts/check-bedrock.js",
+    "live-test": "node scripts/live-test.js",
+    "check-voice": "node scripts/check-voice.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1155.0",
+    "@aws-sdk/client-polly": "^3.1155.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "adhan": "^4.4.6",
+    "express": "^5.3.0",
+    "zod": "^4.6.7"
+  },
+  "type": "module"
+}

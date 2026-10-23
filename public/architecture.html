@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anchor architecture</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚓</text></svg>">
+<style>
+  :root { --bg: #1a2433; --panel: #232f3e; --panel2: #2c3a4d; --line: #37475d; --text: #eef2fb; --muted: #9aa6c2; --accent: #00caff; --orange: #ff9900; --green: #3ccf91; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 17px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; align-items: center; padding: 28px 16px; }
+  h1 { margin: 0; font-size: 30px; } .sub { color: var(--muted); margin: 4px 0 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; width: min(1100px, 100%); }
+  .box { background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 16px 18px; transition: border-color .4s, box-shadow .4s, opacity .4s; opacity: .45; }
+  .box h2 { margin: 0 0 6px; font-size: 19px; } .box p { margin: 0; color: var(--muted); font-size: 15px; }
+  .box .tag { display: inline-block; font: 600 12px ui-monospace, Menlo, monospace; padding: 2px 8px; border-radius: 999px; margin: 8px 6px 0 0; background: var(--panel2); }
+  .box.on { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0, 202, 255, .15), 0 0 30px rgba(0, 202, 255, .25); }
+  .box.aws.on { border-color: var(--orange); box-shadow: 0 0 0 4px rgba(255, 153, 0, .15), 0 0 30px rgba(255, 153, 0, .25); }
+  .wide { grid-column: 1 / -1; }
+  .arrow { grid-column: 1 / -1; text-align: center; color: var(--muted); font: 600 14px ui-monospace, Menlo, monospace; }
+  .caption { margin-top: 26px; width: min(1100px, 100%); min-height: 3.2em; font-size: 20px; text-align: center; }
+  .hint { color: var(--muted); font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>⚓ Anchor: how it works</h1>
+<p class="sub">An adaptive routine coach for Alexa+</p>
+
+<div class="grid">
+  <div class="box" id="b-alexa"><h2>🗣️ Simulated Alexa+</h2><p>Voice in the browser, reminders, a clock per user, and a live log of every MCP call.</p><span class="tag">MCP client</span></div>
+  <div class="box aws" id="b-agent"><h2>🧠 Amazon Bedrock · Nova Pro</h2><p>The agent. A Converse API tool-use loop that picks Anchor's tools.</p><span class="tag">AWS</span></div>
+  <div class="arrow">▼ MCP 2025-11-25 · Streamable HTTP · POST /mcp ▼</div>
+  <div class="box wide" id="b-mcp"><h2>⚓ Anchor MCP server (self-hosted)</h2><p>10 tools: get_started, set_anchors, set_routine, get_day, plan_tasks, anchor_arrived, check_in, start_routine, next_step, reflect_and_adjust. Each answers in under 30 ms and returns today's anchors as structuredContent.</p><span class="tag">Node.js + MCP SDK</span><span class="tag">per-user state</span><span class="tag">prayer times on the server</span></div>
+  <div class="box aws" id="b-bg"><h2>🔁 Amazon Bedrock · Nova Lite</h2><p>Runs in the background, after the reply: rewrites routines from feedback and real step times, and turns check-ins into coaching tips.</p><span class="tag">AWS</span></div>
+  <div class="box aws" id="b-voice"><h2>🔊 Amazon Polly</h2><p>Alexa's voice. Neural text-to-speech, streamed sentence by sentence so it starts talking sooner.</p><span class="tag">AWS</span></div>
+</div>
+
+<div class="caption" id="caption"></div>
+<div class="hint" id="hint">Press Space to play the narrated walkthrough.</div>
+
+<script>
+// Each step lights up part of the diagram while Amazon Polly reads the narration.
+const STEPS = [
+  { on: [], say: "Here's how Anchor works under the hood." },
+  { on: ['b-alexa'], say: "We didn't have Alexa Plus developer access, so we built a simulated Alexa Plus in the browser, as the track allows. It handles voice, reminders and the clock." },
+  { on: ['b-agent'], say: "Its brain is Amazon Bedrock, running Nova Pro in a Converse tool-use loop. It decides which of Anchor's tools to call." },
+  { on: ['b-mcp'], say: "Anchor itself is a self-hosted MCP server, on spec 2025-11-25 over Streamable HTTP. The simulator reaches it only through the MCP endpoint, exactly like real Alexa Plus would." },
+  { on: ['b-mcp'], say: "It has ten tools. The server tracks where each user is in setup and tells Alexa what to do next, and every answer carries today's anchors as structured content, so reminders never depend on the model copying times." },
+  { on: ['b-mcp', 'b-bg'], say: "Alexa Plus needs tool answers within 500 milliseconds. So every tool answers from local data in under 30, and the slow model work runs in the background on Nova Lite: adapting routines and writing coaching tips for the next check-in." },
+  { on: ['b-voice'], say: "And Amazon Polly gives Alexa its voice." },
+  { on: ['b-alexa', 'b-agent', 'b-mcp', 'b-bg', 'b-voice'], say: "Three AWS services working together, and one MCP server that real Alexa Plus can plug into. That's Anchor." },
+];
+
+async function speak(text) {
+  try {
+    const res = await fetch('/api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!res.ok) throw new Error(await res.text());
+    const audio = new Audio(URL.createObjectURL(await res.blob()));
+    audio.playbackRate = 1.1;
+    await audio.play();
+    await new Promise(r => (audio.onended = r));
+  } catch {
+    await new Promise(r => { const u = new SpeechSynthesisUtterance(text); u.onend = r; speechSynthesis.speak(u); });
+  }
+}
+
+let playing = false;
+async function play() {
+  if (playing) return;
+  playing = true;
+  document.getElementById('hint').textContent = '';
+  for (const step of STEPS) {
+    document.querySelectorAll('.box').forEach(b => b.classList.toggle('on', step.on.includes(b.id)));
+    document.getElementById('caption').textContent = step.say.replace(/Alexa Plus/g, 'Alexa+');
+    await speak(step.say);
+    await new Promise(r => setTimeout(r, 350));
+  }
+  playing = false;
+}
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); play(); } });
+</script>
+</body>
+</html>
